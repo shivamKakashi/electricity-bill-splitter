@@ -1,108 +1,81 @@
+import { money, units } from "../lib/format";
 
-
-
-
-function FloorCalculationSummary({ bill, floors }) {
-
-
-    const totalUnits = Number(bill.netBilledUnits);
-    const rate = totalUnits > 0 ? Number(bill.energyCharges) / totalUnits : 0;
-
-
-  const groundUnits = Number(floors.ground) || 0;
-  const firstUnits = Number(floors.first) || 0;
-  const secondUnits = Number(floors.second) || 0;
-
-  const totalFloorUnits =
-    groundUnits + firstUnits + secondUnits;
-
-    const waterUnits = Math.max(
-    Number(bill.netBilledUnits) - totalFloorUnits,
-    0
-    );
-  const waterCost = waterUnits * rate;
-  const waterShare = waterCost / 3;
-
-
-  const taxes = Number(bill.demandCharges) + Number(bill.electricityDuty) + Number(bill.excessDemandPenalty) + Number(bill.miscCharges) ;
-  const taxShare = taxes / 3;
-
-    const baseFloorCost = (units) =>
-    units * rate + waterShare + taxShare;
-
-  const groundBase = baseFloorCost(groundUnits);
-  const firstBase = baseFloorCost(firstUnits);
-  const secondBase = baseFloorCost(secondUnits);
-
-    const baseTotal =
-    groundBase + firstBase + secondBase;
-
-
-
-    const payableAmount = Number(bill.payableAmount);
-
-  const overcharge = Math.max(
-    baseTotal - payableAmount,
-    0
-  );
-
-  const discountUnit = overcharge / 4;
-
-  const discounts = {
-    ground: discountUnit,
-    first: discountUnit,
-    second: discountUnit * 2,
-  };
-
-  const finalGround = groundBase - discounts.ground;
-  const finalFirst = firstBase - discounts.first;
-  const finalSecond = secondBase - discounts.second;
-
-
+function FloorCalculationSummary({ bill, split, isSaved, saveState, onSave }) {
   return (
-    <div className="card">
-      <h3>Per Floor Calculation</h3>
+    <section className="card">
+      <h2>Who pays what</h2>
 
-      <div className="row">
-        <span>Rate / Unit</span>
-        <span>₹{rate.toFixed(2)}</span>
-      </div>
+      <ul className="shares">
+        {split.floors.map((f) => (
+          <li key={f.key}>
+            <span>
+              <strong>{f.label}</strong>
+              <span className="hint">{units(f.units)} units</span>
+            </span>
+            <span className="share-amount">{money(f.share)}</span>
+          </li>
+        ))}
+      </ul>
 
-      <div className="row">
-        <span>Water Units (Central)</span>
-        <span>{waterUnits.toFixed(2)}</span>
+      <div className="row total">
+        <span>Total collected</span>
+        <span>{money(split.totalShares)}</span>
       </div>
-      <div className="row">
-        <span>Water Cost / Floor</span>
-        <span>{waterShare.toFixed(2)}</span>
-      </div>
-      <div className="row">
-        <span>Taxes / Floor</span>
-        <span>{taxShare.toFixed(2)}</span>
-      </div>
-        
-        <div className="row">
-        <span>Total Discount Applied</span>
-        <span>₹{overcharge.toFixed(2)}</span>
+      <div className="row muted">
+        <span>Bill amount</span>
+        <span>{money(bill.payableAmount)}</span>
       </div>
 
-      <hr />
+      {split.carryUsed > 0 && (
+        <div className="alert alert-info">
+          {units(split.carryUsed)} extra units from the last bill were taken off this month's water
+          usage, so {money(split.carryUsed * split.rate)} less is collected.
+        </div>
+      )}
+      {split.carryOutUnits > 0 && (
+        <div className="alert alert-warn">
+          {split.newExtraUnits > 0 &&
+            `The floor meters show ${units(split.newExtraUnits)} units more than the main meter. Each floor still pays for its own meter, so the extra is collected now. `}
+          <strong>
+            {units(split.carryOutUnits)} units ({money(split.carryOutUnits * split.rate)})
+          </strong>{" "}
+          will be taken off next month's water usage once you save.
+        </div>
+      )}
 
-      <div className="floor-row">
-        <strong>Ground Floor</strong>
-        <span>₹{finalGround.toFixed(2)}</span>
-      </div>
+      <details className="breakdown">
+        <summary>How this was worked out</summary>
+        <div className="row"><span>Energy rate</span><span>{money(split.rate)}/unit</span></div>
+        <div className="row"><span>Water pump units</span><span>{units(split.waterUnits)}</span></div>
+        <div className="row"><span>Water cost per floor</span><span>{money(split.waterShare)}</span></div>
+        <div className="row"><span>Taxes &amp; charges per floor</span><span>{money(split.taxShare)}</span></div>
+        <div className="row"><span>Discount, split 1 : 1 : 2</span><span>{money(split.overcharge)}</span></div>
+        {split.floors.map((f) => (
+          <div className="row formula" key={f.key}>
+            <span>{f.label}</span>
+            <span>
+              {money(f.energyCost)} + {money(split.waterShare)} + {money(split.taxShare)} − {money(f.discount)}
+            </span>
+          </div>
+        ))}
+      </details>
 
-      <div className="floor-row">
-        <strong>First Floor</strong>
-        <span>₹{finalFirst.toFixed(2)}</span>
-      </div>
-
-      <div className="floor-row">
-        <strong>Second Floor</strong>
-        <span>₹{finalSecond.toFixed(2)}</span>
-      </div>
-    </div>
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={onSave}
+        disabled={isSaved || saveState.status === "saving"}
+      >
+        {saveState.status === "saving" ? "Saving…" : isSaved ? "Saved ✓" : "Save this month"}
+      </button>
+      {saveState.status === "error" ? (
+        <p className="field-error" role="alert">{saveState.message}</p>
+      ) : (
+        !isSaved && (
+          <p className="hint center">Saving keeps a record and lets next month's bill pick up carried units.</p>
+        )
+      )}
+    </section>
   );
 }
 
